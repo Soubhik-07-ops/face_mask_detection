@@ -62,3 +62,4 @@ scikit-learn
 matplotlib # For development/testing, though not strictly needed in prod for web app
 seaborn    # For development/testing
 werkzeug   # Already a Flask dependency, but good to be explicit if issues arise
+gunicorn
