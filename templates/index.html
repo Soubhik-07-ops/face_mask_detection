@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Mask Detector</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            /* rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 2.5rem;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            cursor: pointer;
+            border: 2px dashed #cbd5e0;
+            /* Gray-300 */
+            border-radius: 0.5rem;
+            padding: 1rem;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .file-input-wrapper:hover {
+            border-color: #a0aec0;
+            /* Gray-400 */
+            background-color: #f7fafc;
+            /* Gray-50 */
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            /* Make input cover the wrapper */
+            height: 100%;
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            display: none;
+            /* Hidden by default */
+        }
+
+        .prediction-box {
+            border: 1px solid #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1.5rem;
+            background-color: #f8fafc;
+        }
+
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #4f46e5;
+            /* Indigo-600 */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none;
+            /* Hidden by default */
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <div class="container bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">Face Mask Detection</h1>
+
+        <div class="mb-6 text-center">
+            <div class="file-input-wrapper">
+                <input type="file" id="imageUpload" accept="image/png, image/jpeg, image/jpg" onchange="previewImage()">
+                <span class="text-gray-600">Drag & Drop or Click to Upload Image</span>
+            </div>
+            <p id="fileName" class="text-sm text-gray-500 mt-2"></p>
+        </div>
+
+        <div class="mb-6">
+            <img id="imagePreview" class="mx-auto" alt="Image Preview">
+        </div>
+
+        <button id="predictButton"
+            class="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 transition duration-300">
+            Predict Mask Status
+        </button>
+
+        <div id="loadingSpinner" class="loading-spinner mt-4"></div>
+
+        <div id="predictionResults" class="prediction-box mt-6 p-4 rounded-xl shadow-inner hidden">
+            <h2 class="text-xl font-semibold text-gray-700 mb-3">Detection Results:</h2>
+            <div id="resultsContent">
+            </div>
+        </div>
+
+        <div id="errorMessage" class="text-red-600 text-center mt-4 font-medium hidden">
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const imagePreview = document.getElementById('imagePreview');
+        const fileNameSpan = document.getElementById('fileName');
+        const predictButton = document.getElementById('predictButton');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const predictionResults = document.getElementById('predictionResults');
+        const resultsContent = document.getElementById('resultsContent');
+        const errorMessageDiv = document.getElementById('errorMessage');
+
+        function previewImage() {
+            const file = imageUpload.files[0];
+            if (file) {
+                fileNameSpan.textContent = file.name;
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    imagePreview.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                    predictionResults.classList.add('hidden'); // Hide previous results
+                    errorMessageDiv.classList.add('hidden'); // Hide previous errors
+                    resultsContent.innerHTML = ''; // Clear previous results
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.style.display = 'none';
+                imagePreview.src = '';
+                fileNameSpan.textContent = '';
+            }
+        }
+
+        predictButton.addEventListener('click', async () => {
+            const file = imageUpload.files[0];
+            if (!file) {
+                displayMessage('Please upload an image first.', 'error');
+                return;
+            }
+
+            loadingSpinner.style.display = 'block';
+            predictButton.disabled = true;
+            predictionResults.classList.add('hidden');
+            errorMessageDiv.classList.add('hidden');
+            resultsContent.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.predictions && data.predictions.length > 0) {
+                        resultsContent.innerHTML = ''; // Clear previous content
+                        data.predictions.forEach(face => {
+                            const p = document.createElement('p');
+                            p.className = 'text-gray-700 text-md mb-1';
+                            p.textContent = `• Detected Face: ${face.prediction} (Confidence: ${face.confidence})`;
+                            resultsContent.appendChild(p);
+                        });
+                        predictionResults.classList.remove('hidden');
+                    } else {
+                        // This handles the "No faces detected" message from the backend
+                        displayMessage(data.message || 'No faces detected or unknown issue.', 'info');
+                    }
+                } else {
+                    displayMessage(data.error || 'An unknown error occurred.', 'error');
+                }
+            } catch (error) {
+                console.error('Fetch error:', error);
+                displayMessage('Failed to connect to the server. Please try again.', 'error');
+            } finally {
+                loadingSpinner.style.display = 'none';
+                predictButton.disabled = false;
+            }
+        });
+
+        function displayMessage(message, type) {
+            errorMessageDiv.textContent = message;
+            if (type === 'error') {
+                errorMessageDiv.classList.remove('hidden');
+                errorMessageDiv.classList.add('text-red-600');
+                errorMessageDiv.classList.remove('text-gray-700'); // Ensure only red for error
+            } else if (type === 'info') {
+                errorMessageDiv.classList.remove('hidden');
+                errorMessageDiv.classList.remove('text-red-600');
+                errorMessageDiv.classList.add('text-gray-700'); // Or a different color for info
+            }
+            predictionResults.classList.add('hidden'); // Always hide prediction results on message
+        }
+    </script>
+</body>
+
+</html>
